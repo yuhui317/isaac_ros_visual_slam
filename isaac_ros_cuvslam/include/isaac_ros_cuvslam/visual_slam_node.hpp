@@ -29,6 +29,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "rclcpp/qos.hpp"
 
+// 学习入口：参数与消息接口的完整声明；仓库名仍是 isaac_ros_visual_slam，ROS 算法包已改为 isaac_ros_cuvslam。
 namespace nvidia
 {
 namespace isaac_ros
@@ -36,6 +37,7 @@ namespace isaac_ros
 namespace visual_slam
 {
 
+// IMU 噪声参数结构；保留原字段单位说明，calibration_frequency 随后写入 SDK 的 frequency。
 struct IMUParams
 {
   double gyroscope_noise_density;       // rad / (s * srqt(Hz))
@@ -47,6 +49,7 @@ struct IMUParams
 
 /// Tracking mode enumeration
 /// Defines the type of tracking algorithm used by the visual SLAM system
+// 跟踪算法选择：多相机、视觉惯性、RGBD；这些整数也用于 launch 参数。
 enum class TrackingMode : int
 {
   MULTICAMERA = 0,  ///< Default multicamera stereo tracking
@@ -55,6 +58,7 @@ enum class TrackingMode : int
 };
 
 /// Convert TrackingMode enum to string representation
+// 仅为日志把模式整数转换为可读名称；未知数值返回 Unknown。
 inline const char * TrackingModeToString(int mode)
 {
   switch (mode) {
@@ -69,10 +73,13 @@ inline const char * TrackingModeToString(int mode)
   }
 }
 
+// ROS 节点持有参数和接口，私有实现封装同步器、cuVSLAM 对象和 TF/轨迹发布。
 class VisualSlamNode : public rclcpp::Node
 {
 public:
+  // 声明组件节点构造函数；实现同时建立订阅服务并预热 CUDA。
   explicit VisualSlamNode(const rclcpp::NodeOptions options = rclcpp::NodeOptions());
+  // 声明析构路径，等待定位线程并按配置保存地图。
   virtual ~VisualSlamNode();
 
 private:
@@ -194,6 +201,7 @@ private:
 
   // This node assumes the following frame hierarchy:
   // map - odom - base - ... - camera_i
+  // 三种参考系分别承载地图修正、连续里程计与机器人基座；不要把 map 与 odom 的位姿直接当成同一数值。
   const std::string map_frame_;
   const std::string odom_frame_;
   const std::string base_frame_;
@@ -262,10 +270,13 @@ private:
   const rclcpp::CallbackGroup::SharedPtr localize_in_map_callback_group_;
 
   // Subscribers
+  // 图像使用标准 sensor_msgs::Image，release-5.0 的 GPU 传输通过其 Buffer 后端实现。
   const std::vector<rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr>
   image_subs_;
+  // 图像使用标准 sensor_msgs::Image，release-5.0 的 GPU 传输通过其 Buffer 后端实现。
   const std::vector<rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr>
   segmentation_masks_subs_;
+  // 图像使用标准 sensor_msgs::Image，release-5.0 的 GPU 传输通过其 Buffer 后端实现。
   const std::vector<rclcpp::Subscription<sensor_msgs::msg::Image>::SharedPtr>
   depth_image_subs_;
   const std::vector<rclcpp::Subscription<CameraInfoType>::SharedPtr> camera_info_subs_;
@@ -313,31 +324,42 @@ private:
   const rclcpp::Service<SrvLocalizeInMap>::SharedPtr localize_in_map_srv_;
 
   // Callback functions for services.
+  // 重置服务调用实现层 Exit，清除跟踪器及初始化消息；当前响应直接设为成功。
   void CallbackReset(
     const std::shared_ptr<SrvReset::Request> req,
     std::shared_ptr<SrvReset::Response> res);
+  // 读取 SLAM 轨迹并逐个把 cuVSLAM 坐标基转换为 ROS 坐标基，保留 SDK 纳秒时间戳。
   void CallbackGetAllPoses(
     const std::shared_ptr<SrvGetAllPoses::Request> req,
     std::shared_ptr<SrvGetAllPoses::Response> res);
+  // 将服务请求中的 ROS 位姿换基为 cuVSLAM 位姿，再设置 SLAM 状态；要求跟踪器已初始化。
   void CallbackSetSlamPose(
     const std::shared_ptr<SrvSetSlamPose::Request> req,
     std::shared_ptr<SrvSetSlamPose::Response> res);
+  // 在已初始化时调用同步保存包装；注意此回调未使用 SaveMap 的 bool 返回值，响应成功不等同于落盘成功。
   void CallbackSaveMap(
     const std::shared_ptr<SrvFilePath::Request> req,
     std::shared_ptr<SrvFilePath::Response> res);
+  // 仅记录后续定位使用的地图目录，不在本回调中读取数据库或立即完成定位。
   void CallbackLoadMap(
     const std::shared_ptr<SrvFilePath::Request> req,
     std::shared_ptr<SrvFilePath::Response> res);
+  // 创建受管理线程发起异步定位；success=true 表示已发起，完成结果由后续跟踪时检查 future。
   void CallbackLocalizeInMap(
     const std::shared_ptr<SrvLocalizeInMap::Request> req,
     std::shared_ptr<SrvLocalizeInMap::Response> res);
 
   // Callback functions for subscribers.
+  // 把 IMU 消息交给实现层缓存或按时间排序；VIO 模式才建立此订阅。
   void CallbackImu(const ImuType::ConstSharedPtr & msg);
+  // 把索引图像交给实现层同步；图像、掩码、RGBD 深度共用索引空间。
   void CallbackImage(int index, const ImageType & msg);
+  // 把相机索引和标定交给实现层，供首次构建相机 rig 使用。
   void CallbackCameraInfo(int index, const CameraInfoType::ConstSharedPtr & msg);
+  // 使用消息 frame_id 中的位姿提示同步定位；失败时按配置请求新提示或关闭 ROS。
   void CallbackInitialPose(const PoseWithCovarianceStampedType::ConstSharedPtr & msg);
 
+  // 只前向声明实现对象；其定义中的同步与 CUDA 句柄生命周期见 impl/visual_slam_impl.hpp/.cpp。
   struct VisualSlamImpl;
   std::unique_ptr<VisualSlamImpl> impl_;
 

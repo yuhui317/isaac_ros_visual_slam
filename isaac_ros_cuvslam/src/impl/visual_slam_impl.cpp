@@ -36,6 +36,7 @@
 #include "isaac_ros_cuvslam/impl/visual_slam_impl.hpp"
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 
+// 学习入口：ROS 包装的实际跟踪数据流；cuVSLAM 特征/优化算法在固定 gitlink 的外部源码中，本轮未下载。
 namespace
 {
 
@@ -43,9 +44,11 @@ constexpr uint32_t CLR_RED = 0xFFFF0000;
 constexpr uint32_t CLR_YELLOW = 0xFFFFFF00;
 constexpr uint32_t CLR_MAGENTA = 0xFFFF00FF;
 
+// 仅用于可选 NVTX 性能标记的 RAII 对象，不承担算法计算或线程同步。
 class NvtxRangeScoped
 {
 public:
+  // 在 USE_NVTX 构建中推入命名范围；否则只消除未用参数。
   NvtxRangeScoped(const char * range_title, uint32_t range_color)
   {
     #if defined(USE_NVTX)
@@ -62,6 +65,7 @@ public:
     (void)range_color;
     #endif
   }
+  // 在 USE_NVTX 构建中弹出范围，配合构造标记计时边界。
   ~NvtxRangeScoped()
   {
     #if defined(USE_NVTX)
@@ -70,6 +74,7 @@ public:
   }
 };
 
+// 记录 SDK GPU 与惯性模式配置，供运行诊断。
 void PrintConfiguration(const rclcpp::Logger & logger, const cuvslam::Odometry::Config & cfg)
 {
   RCLCPP_INFO(logger, "Use use_gpu: %s", cfg.use_gpu ? "true" : "false");
@@ -77,6 +82,7 @@ void PrintConfiguration(const rclcpp::Logger & logger, const cuvslam::Odometry::
       cfg.odometry_mode == cuvslam::Odometry::OdometryMode::Inertial ? "true" : "false");
 }
 
+// 打印已传入 SDK 的 IMU 噪声与频率标定值。
 void PrintImuCalibration(const rclcpp::Logger & logger, const cuvslam::ImuCalibration & imu)
 {
   RCLCPP_INFO(logger, "gyroscope_noise_density: %f", imu.gyroscope_noise_density);
@@ -86,6 +92,7 @@ void PrintImuCalibration(const rclcpp::Logger & logger, const cuvslam::ImuCalibr
   RCLCPP_INFO(logger, "frequency: %f", imu.frequency);
 }
 
+// 以单位初始位姿创建 SDK 地面约束对象，捕获异常并返回空指针。
 std::unique_ptr<cuvslam::GroundConstraint> InitGroundConstraint(const rclcpp::Logger & logger)
 {
   const cuvslam::Pose identity = nvidia::isaac_ros::visual_slam::TocuVSLAMPose(
@@ -104,6 +111,7 @@ std::unique_ptr<cuvslam::GroundConstraint> InitGroundConstraint(const rclcpp::Lo
   }
 }
 
+// 把当前位姿加入 SDK 约束历史并替换为地面约束后的位姿。
 bool PoseToGround(
   cuvslam::GroundConstraint & ground, cuvslam::Pose & pose,
   const rclcpp::Logger & logger)
@@ -128,13 +136,16 @@ namespace isaac_ros
 namespace visual_slam
 {
 
+// 声明实现构造：配置多相机同步、IMU 交织、TF 和 CUDA 同步流。
 VisualSlamNode::VisualSlamImpl::VisualSlamImpl(VisualSlamNode & vslam_node)
 : node(vslam_node),
+  // 图像同步阈值在这里乘 1e6，把配置毫秒转换为纳秒；同步成员还包括启用的掩码与 RGBD 深度。
   sync(node.num_cameras_ + node.num_input_masks_ +
     (node.tracking_mode_ == static_cast<int>(TrackingMode::RGBD) ? 1 : 0),
     1e6 * node.sync_matching_threshold_ms_, node.min_num_images_ +
     node.num_input_masks_ + (node.tracking_mode_ == static_cast<int>(TrackingMode::RGBD) ? 1 : 0),
     node.image_buffer_size_),
+  // 注意这里直接传入命名为 *_ms 的阈值，而排序器比较纳秒时间戳；这是原始接口单位疑点，本轮保持原样。
   sequencer(node.imu_buffer_size_, node.imu_jitter_threshold_ms_, node.image_buffer_size_,
     node.image_jitter_threshold_ms_),
   tf_buffer(std::make_unique<tf2_ros::Buffer>(node.get_clock())),
@@ -179,6 +190,7 @@ VisualSlamNode::VisualSlamImpl::VisualSlamImpl(VisualSlamNode & vslam_node)
       std::placeholders::_1, std::placeholders::_2));
 }
 
+// 声明清理跟踪/可视化对象并销毁 CUDA 流的析构路径。
 VisualSlamNode::VisualSlamImpl::~VisualSlamImpl()
 {
   Exit();
@@ -189,11 +201,13 @@ VisualSlamNode::VisualSlamImpl::~VisualSlamImpl()
 }
 
 // Flag to check the status of initialization.
+// 用 cuvslam_odometry 是否存在表示跟踪器初始化状态。
 bool VisualSlamNode::VisualSlamImpl::IsInitialized() const
 {
   return cuvslam_odometry != nullptr;
 }
 
+// 检查标定消息路数；VIO 还需要首次 IMU 消息。
 bool VisualSlamNode::VisualSlamImpl::IsReadyForInitialization() const
 {
   // We need at least one message of every sensor to initialize.
@@ -207,6 +221,7 @@ bool VisualSlamNode::VisualSlamImpl::IsReadyForInitialization() const
   return false;
 }
 
+// 用首次 CameraInfo、所需 IMU 和 TF 外参建立 SDK 相机 rig 与跟踪器。
 void VisualSlamNode::VisualSlamImpl::Initialize()
 {
   if (IsInitialized()) {
@@ -223,6 +238,7 @@ void VisualSlamNode::VisualSlamImpl::Initialize()
     }
   }
 
+  // 初始化外参从 base 到 optical camera 查询；设置 rectified_images 后还会乘 R 的逆修正整流坐标。
   // Set the base frame.
   std::string base_frame;
   if (!node.base_frame_.empty()) {
@@ -308,6 +324,7 @@ void VisualSlamNode::VisualSlamImpl::Initialize()
     }
   }
 
+  // VIO 模式才构建 IMU 外参和噪声标定，随后与相机一起组成 rig。
   // Create the IMU configuration. If the IMU is disabled we just use the identity transform.
   tf2::Transform cv_base_link_pose_cv_imu;
   cv_base_link_pose_cv_imu.setIdentity();
@@ -331,6 +348,7 @@ void VisualSlamNode::VisualSlamImpl::Initialize()
     PrintImuCalibration(node.get_logger(), imu_calibration);
   }
 
+  // 先创建里程计，只有 enable_localization_n_mapping 才额外创建 SLAM 地图对象。
   // Create cuvslam odometry tracker.
   const cuvslam::Odometry::Config configuration = CreateOdometryConfiguration();
   PrintConfiguration(node.get_logger(), configuration);
@@ -396,6 +414,7 @@ void VisualSlamNode::VisualSlamImpl::Initialize()
   if (node.localize_on_startup_) {
     // We don't care when this thread returns since we anyways can't do anything if the localization
     // fails. Thus we detach it.
+    // 启动定位的此分支使用 detach；它与接口层受管理线程是不同路径，生命周期需在后续实测中核对。
     std::thread(
       [this]() {
         const PoseType identity;
@@ -411,6 +430,7 @@ void VisualSlamNode::VisualSlamImpl::Initialize()
   }
 }
 
+// 释放 SDK 对象、清空位姿缓存和初始化消息，并尝试结束未完成的定位 promise。
 void VisualSlamNode::VisualSlamImpl::Exit()
 {
   // observations_vis_helper.Exit();
@@ -453,6 +473,7 @@ void VisualSlamNode::VisualSlamImpl::Exit()
   }
 }
 
+// 将 ROS 跟踪模式/图像预处理/RGBD 参数转换成 SDK odometry 配置。
 cuvslam::Odometry::Config VisualSlamNode::VisualSlamImpl::CreateOdometryConfiguration()
 {
   cuvslam::Odometry::Config configuration = cuvslam::Odometry::GetDefaultConfig();
@@ -491,6 +512,7 @@ cuvslam::Odometry::Config VisualSlamNode::VisualSlamImpl::CreateOdometryConfigur
   return configuration;
 }
 
+// 将地图大小、回环间隔、平面约束及可视化配置写入 SDK SLAM 配置。
 cuvslam::Slam::Config VisualSlamNode::VisualSlamImpl::CreateSlamConfiguration()
 {
   cuvslam::Slam::Config configuration = cuvslam::Slam::GetDefaultConfig();
@@ -502,6 +524,7 @@ cuvslam::Slam::Config VisualSlamNode::VisualSlamImpl::CreateSlamConfiguration()
 }
 
 // Helper function to publish source frame pose wrt target frame to the tf tree
+// 以 target 为父坐标系、source 为子坐标系发布给定 pose。
 void VisualSlamNode::VisualSlamImpl::PublishFrameTransform(
   rclcpp::Time stamp, const tf2::Transform & pose,
   const std::string & target, const std::string & source)
@@ -515,6 +538,7 @@ void VisualSlamNode::VisualSlamImpl::PublishFrameTransform(
 }
 
 // Helper function to get child frame pose wrt parent frame from the tf tree
+// 查询 TF 最新可用变换；初始化外参在此路径使用最新值而非传入传感器采集时刻。
 tf2::Transform VisualSlamNode::VisualSlamImpl::GetLatestTransform(
   const std::string & target, const std::string & source)
 {
@@ -544,6 +568,7 @@ tf2::Transform VisualSlamNode::VisualSlamImpl::GetLatestTransform(
   return pose;
 }
 
+// 把位姿缓存估计的线/角速度可视化为两个箭头。
 void VisualSlamNode::VisualSlamImpl::PublishOdometryVelocity(
   rclcpp::Time stamp, const std::string & frame_id,
   const rclcpp::Publisher<MarkerArrayType>::SharedPtr publisher)
@@ -629,6 +654,7 @@ void VisualSlamNode::VisualSlamImpl::PublishOdometryVelocity(
   publisher->publish(markers);
 }
 
+// 仅 VIO 且 SDK 已有重力估计时换基并发布可视化箭头。
 void VisualSlamNode::VisualSlamImpl::PublishGravity(
   rclcpp::Time stamp, const std::string & frame_id,
   const rclcpp::Publisher<MarkerType>::SharedPtr publisher)
@@ -685,6 +711,7 @@ void VisualSlamNode::VisualSlamImpl::PublishGravity(
 }
 
 
+// 初始化前缓存首个 IMU，初始化后进入快流排序器。
 void VisualSlamNode::VisualSlamImpl::CallbackImu(const ImuType::ConstSharedPtr & msg)
 {
   NvtxRangeScoped trace(
@@ -696,6 +723,7 @@ void VisualSlamNode::VisualSlamImpl::CallbackImu(const ImuType::ConstSharedPtr &
   } else {initial_imu_message = msg;}
 }
 
+// 初始化后按相机/掩码/深度索引和采集时间进入图像同步器。
 void VisualSlamNode::VisualSlamImpl::CallbackImage(int index, const ImageType & image)
 {
   NvtxRangeScoped trace(
@@ -707,6 +735,7 @@ void VisualSlamNode::VisualSlamImpl::CallbackImage(int index, const ImageType & 
   }
 }
 
+// 初始化前缓存各路标定，达到条件时发起初始化。
 void VisualSlamNode::VisualSlamImpl::CallbackCameraInfo(
   int index, const CameraInfoType::ConstSharedPtr & msg)
 {
@@ -719,12 +748,14 @@ void VisualSlamNode::VisualSlamImpl::CallbackCameraInfo(
   }
 }
 
+// 将多相机同步组作为慢流交给 IMU/图像交织器。
 void VisualSlamNode::VisualSlamImpl::CallbackSynchronizedImages(
   int64_t latest_ts, const std::vector<std::pair<int, ImageType>> & idx_and_image_msgs)
 {
   sequencer.CallbackStream2(latest_ts, idx_and_image_msgs);
 }
 
+// 跟踪核心：登记 IMU→取得 Buffer 句柄→Track→换基→TF/位姿/里程计/状态。
 void VisualSlamNode::VisualSlamImpl::UpdatePose(
   const std::vector<ImuType::ConstSharedPtr> & imu_msgs,
   const std::vector<std::pair<int, ImageType>> & idx_and_image_msgs)
@@ -760,6 +791,7 @@ void VisualSlamNode::VisualSlamImpl::UpdatePose(
   }
 
   Stopwatch stopwatch_track;
+  // 把自上次图像更新以来的 IMU 按排序器给出的批次登记到 SDK；不是只使用最后一条 IMU。
   // First we add all imu measurements received since the last update.
   for (const auto & imu_msg : imu_msgs) {
     const rclcpp::Time timestamp(imu_msg->header.stamp);
@@ -782,12 +814,14 @@ void VisualSlamNode::VisualSlamImpl::UpdatePose(
   // ReadHandles must outlive the cuvslam::Odometry::Track call so that the
   // GPU memory referenced by cuvslam_images stays valid and the CUDA event
   // synchronization between producer and consumer is preserved.
+  // 读句柄保存在当前栈帧直到 Track 返回，以覆盖图像/掩码/深度 GPU 视图的使用期。
   std::vector<cuda_buffer_backend::ReadHandle> read_handles;
   read_handles.reserve(idx_and_image_msgs.size());
 
   // Calculate the depth image index
   const int depth_image_idx = node.num_cameras_ + node.num_input_masks_;
 
+  // 掩码索引减 num_cameras 后对应图像索引；深度索引不参与掩码映射。
   // First, extract the masks from the synchronized messages
   std::unordered_map<int, const ImageType *> mask_msgs;
   for (const auto & [idx, image_msg] : idx_and_image_msgs) {
@@ -820,6 +854,7 @@ void VisualSlamNode::VisualSlamImpl::UpdatePose(
     }
   }
 
+  // 显式同步此 CUDA 流后再调用 SDK，避免只依赖流等待却让 SDK 内部另一条流读取未完成的数据。
   // Ensure all producer writes have completed before cuvslam consumes the data.
   // cuvslam may use its own internal stream and synchronous CUDA APIs, so we cannot
   // rely on the from_input_buffer stream-wait alone.
@@ -845,6 +880,7 @@ void VisualSlamNode::VisualSlamImpl::UpdatePose(
       return;
     }
   }
+  // SDK world_from_rig 可选值决定 VO 是否成功；丢跟踪会重置速度估计所用位姿缓存。
   bool vo_success = vo_pose_estimate.world_from_rig != std::nullopt;
 
   if (!vo_success) {
@@ -889,8 +925,10 @@ void VisualSlamNode::VisualSlamImpl::UpdatePose(
 
     const tf2::Transform map_pose_base_link =
       ChangeBasis(canonical_pose_cuvslam, cv_map_pose_cv_base_link);
+    // T_map_odom = T_map_base * inverse(T_odom_base)；回环修正影响 map，而 odom 提供连续里程计参考。
     const tf2::Transform map_pose_odom = map_pose_base_link * odom_pose_base_link.inverse();
 
+    // 发布开关与反向开关控制 TF 关系；同一子坐标系应由系统设计确定唯一父节点/发布者。
     // Publish transforms to the TF tree.
     if (node.publish_map_to_odom_tf_) {
       if (!node.invert_map_to_odom_tf_) {
@@ -924,6 +962,7 @@ void VisualSlamNode::VisualSlamImpl::UpdatePose(
       velocity.linear.x, velocity.linear.y, velocity.linear.z,
       velocity.angular.x, velocity.angular.y, velocity.angular.z);
 
+    // VO 位姿和 tracking/odometry 的 header 使用 odom_frame；不要从 topic 名猜它是 map 位姿。
     // Prepare message parts needed for VO messages.
     PoseType vo_pose;
     tf2::toMsg(odom_pose_base_link, vo_pose);
@@ -931,6 +970,7 @@ void VisualSlamNode::VisualSlamImpl::UpdatePose(
     header_odom.stamp = timestamp_output;
     header_odom.frame_id = node.odom_frame_;
 
+    // SLAM 路径与可视化 SLAM 里程计使用 map_frame；其数值可因回环而跳变。
     // Prepare message parts needed for SLAM messages.
     PoseType slam_pose;
     tf2::toMsg(map_pose_base_link, slam_pose);
@@ -1038,6 +1078,7 @@ void VisualSlamNode::VisualSlamImpl::UpdatePose(
     }
   }
 
+  // 状态与诊断记录跟踪是否成功和执行耗时；这些测量不会证明任务动作正确。
   // Calculate the tracking execution time statistics.
   ssw.Stop();
   const double track_execution_time = stopwatch_track.Seconds();
@@ -1101,6 +1142,7 @@ void VisualSlamNode::VisualSlamImpl::UpdatePose(
 }
 
 
+// 同步等待异步 SDK 保存回调，返回实际保存结果。
 bool VisualSlamNode::VisualSlamImpl::SaveMap(const std::string & map_folder_path)
 {
   RCLCPP_INFO(node.get_logger(), "Saving map to %s", map_folder_path.c_str());
@@ -1138,6 +1180,7 @@ bool VisualSlamNode::VisualSlamImpl::SaveMap(const std::string & map_folder_path
 }
 
 
+// 验证地图目录与 .mdb 文件后用 cuVSLAM 坐标的提示发起异步定位。
 boost::future<VisualSlamNode::VisualSlamImpl::LocalizeInExistDbContext::Response> VisualSlamNode::
 VisualSlamImpl::CuvslamInternalLocalizeInMapAsync(
   const std::string & map_folder_path,
@@ -1220,6 +1263,7 @@ VisualSlamImpl::CuvslamInternalLocalizeInMapAsync(
 }
 
 
+// 将 ROS 提示换到 map/cuVSLAM 坐标，返回会转回 ROS map 位姿的 future。
 boost::future<std::optional<PoseType>> VisualSlamNode::VisualSlamImpl::LocalizeInMapAsync(
   const std::string & map_folder_path,
   const PoseType & pose_hint,
@@ -1237,6 +1281,7 @@ boost::future<std::optional<PoseType>> VisualSlamNode::VisualSlamImpl::LocalizeI
   const tf2::Transform cv_map_pose_cv_base = ChangeBasis(cuvslam_pose_canonical, map_pose_base);
   const cuvslam::Pose pose_hint_cv = TocuVSLAMPose(cv_map_pose_cv_base);
 
+  // future continuation 把定位结果从 SDK 坐标换回 ROS map 位姿，并更新定位状态。
   auto extract_pose_in_ros_conventions =
     [&](boost::future<LocalizeInExistDbContext::Response> response_future)
     -> std::optional<PoseType>
@@ -1272,6 +1317,7 @@ boost::future<std::optional<PoseType>> VisualSlamNode::VisualSlamImpl::LocalizeI
     pose_hint_cv).then(std::move(extract_pose_in_ros_conventions));
 }
 
+// 同步包装定位 future，调用路径会等待结果。
 std::optional<PoseType> VisualSlamNode::VisualSlamImpl::LocalizeInMap(
   const std::string & map_folder_path,
   const PoseType & pose_hint,
@@ -1280,6 +1326,7 @@ std::optional<PoseType> VisualSlamNode::VisualSlamImpl::LocalizeInMap(
   return LocalizeInMapAsync(map_folder_path, pose_hint, frame_id).get();
 }
 
+// 非阻塞检查受管理的定位 future，记录结果后清空它。
 void VisualSlamNode::VisualSlamImpl::CheckLocalizationStatus()
 {
   std::lock_guard<std::mutex> lock(localization_mutex_);

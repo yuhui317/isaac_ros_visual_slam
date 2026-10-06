@@ -33,6 +33,7 @@
 #include "tf2_geometry_msgs/tf2_geometry_msgs.hpp"
 
 
+// 学习入口：ROS 接口层把 Image/CameraInfo/IMU 转交 VisualSlamImpl；算法位于独立 cuvslam 子模块。
 namespace nvidia
 {
 namespace isaac_ros
@@ -40,9 +41,11 @@ namespace isaac_ros
 namespace visual_slam
 {
 
+// 节点构造：声明跟踪/坐标系/QoS 参数，按模式注册订阅、发布和服务，再创建实现对象并预热 GPU。
 VisualSlamNode::VisualSlamNode(rclcpp::NodeOptions options)
 : Node("visual_slam", options),
   // Functional Parameters:
+  // num_cameras 是图像路数，一套双目通常为两路；min_num_images 决定同步组最少输入数量。
   num_cameras_(declare_parameter<int>("num_cameras", 2)),
   num_input_masks_(declare_parameter<int>("num_input_masks", 0)),
   multicam_mode_(declare_parameter<int>("multicam_mode", 1)),
@@ -59,6 +62,7 @@ VisualSlamNode::VisualSlamNode(rclcpp::NodeOptions options)
   enable_ground_constraint_in_slam_(
     declare_parameter<bool>("enable_ground_constraint_in_slam", false)),
   enable_localization_n_mapping_(declare_parameter<bool>("enable_localization_n_mapping", true)),
+  // 以整数参数限定 0=多相机、1=VIO、2=RGBD；该声明替代旧版 enable_imu_fusion 开关。
   tracking_mode_(
     [this]() {
       rcl_interfaces::msg::ParameterDescriptor descriptor;
@@ -78,6 +82,7 @@ VisualSlamNode::VisualSlamNode(rclcpp::NodeOptions options)
   declare_parameter<double>("accel_noise_density", 0.001862),
   declare_parameter<double>("accel_random_walk", 0.003),
   declare_parameter<double>("calibration_frequency", 200.0)},
+// RGBD 相关参数包含原始深度到米的缩放设置及对齐相机索引，随后传入 cuVSLAM 配置。
 depth_scale_factor_(declare_parameter<float>("depth_scale_factor", 1000.0f)),
 depth_camera_id_(declare_parameter<int32_t>("depth_camera_id", 0)),
 depth_enable_stereo_tracking_(declare_parameter<bool>("depth_enable_stereo_tracking", false)),
@@ -94,6 +99,7 @@ localizer_angular_step_(declare_parameter<float>("localizer_angular_step", 0.174
 slam_max_map_size_(declare_parameter<int>("slam_max_map_size", 300)),
 slam_throttling_time_ms_(declare_parameter<int>("slam_throttling_time_ms", 500)),
 // Frame parameters:
+// 默认 TF 层级为 map→odom→base；相机与 IMU 外参还需上游提供。
 map_frame_(declare_parameter<std::string>("map_frame", "map")),
 odom_frame_(declare_parameter<std::string>("odom_frame", "odom")),
 base_frame_(declare_parameter<std::string>("base_frame", "base_link")),
@@ -102,6 +108,7 @@ camera_optical_frames_(declare_parameter<std::vector<std::string>>(
     std::vector<std::string>{})),
 imu_frame_(declare_parameter<std::string>("imu_frame", "")),
 // Message Parameters:
+// 图像/IMU 缓存长度和 QoS 会影响同步可用性，时间阈值名称中的 ms 表示配置单位。
 image_buffer_size_(declare_parameter<int>("image_buffer_size", 10)),
 imu_buffer_size_(declare_parameter<int>("imu_buffer_size", 50)),
 image_qos_(::isaac_ros::common::AddQosParameter(*this, "SENSOR_DATA", "image_qos")),
@@ -124,6 +131,7 @@ enable_request_hint_(declare_parameter<bool>("enable_request_hint", true)),
 localize_in_map_callback_group_(this->create_callback_group(rclcpp::CallbackGroupType::
   MutuallyExclusive)),
 // Subscribers:
+// 图像订阅接受任意 Buffer 后端并启用进程内通信；真正取得 CUDA 读句柄发生在实现层。
 image_subs_(
   [this]() {
     rclcpp::SubscriptionOptions sub_options;
@@ -140,6 +148,7 @@ image_subs_(
     }
     return subs;
   }()),
+// 掩码订阅回调索引从 num_cameras 开始，稍后与对应图像关联。
 segmentation_masks_subs_(
   [this]() {
     rclcpp::SubscriptionOptions sub_options;
@@ -160,6 +169,7 @@ segmentation_masks_subs_(
     }
     return subs;
   }()),
+// 仅 RGBD 模式订阅 visual_slam/depth_0；深度索引位于图像与掩码之后。
 depth_image_subs_(
   [this]() {
     rclcpp::SubscriptionOptions sub_options;
@@ -178,6 +188,7 @@ depth_image_subs_(
         sub_options));
     return subs;
   }()),
+// 每路 CameraInfo 独立订阅并缓存初始化标定，不使用图像 message_filters 做逐帧标定同步。
 camera_info_subs_(
   [this]() {
     std::vector<rclcpp::Subscription<CameraInfoType>::SharedPtr> subs;
@@ -192,6 +203,7 @@ camera_info_subs_(
     }
     return subs;
   }()),
+// 仅 tracking_mode=VIO 注册 IMU 订阅；多相机与 RGBD 模式返回空订阅。
 imu_sub_(
   [this]() -> rclcpp::Subscription<ImuType>::SharedPtr {
     if (tracking_mode_ != static_cast<int>(TrackingMode::VIO)) {return nullptr;}
@@ -209,6 +221,7 @@ initial_pose_sub_(
       options
     );
   }()),
+// 输出包含 VO 位姿/里程计、VO 和 SLAM 路径以及状态；实际 frame_id 和发布条件在 UpdatePose 中赋值。
 // Publishers: Visual SLAM
 visual_slam_status_pub_(
   create_publisher<VisualSlamStatusType>(
@@ -287,6 +300,7 @@ vis_localizer_loop_closure_pub_(
     "visual_slam/vis/localizer_loop_closure_cloud",
       ::isaac_ros::common::ParseQosString("DEFAULT"))),
 
+// 服务负责重置、轨迹查询、设定位姿、地图路径与定位；各响应的语义应分别阅读，不能统一理解为任务完成。
 // Slam Services
 reset_srv_(
   create_service<SrvReset>(
@@ -329,6 +343,7 @@ impl_(std::make_unique<VisualSlamImpl>(*this))
   RCLCPP_INFO(get_logger(), "cuVSLAM version: %s", std::string(cuvslam_version).c_str());
 
   // VisualSlamNode is designed for this cuvslam sdk version:
+  // 启动要求 cuVSLAM SDK 主/次版本为 15.0；不匹配会退出，源码阅读不代表该依赖已可用。
   int32_t exp_cuvslam_major = 15, exp_cuvslam_minor = 0;
   if (cuvslam_major != exp_cuvslam_major || cuvslam_minor != exp_cuvslam_minor) {
     RCLCPP_FATAL(
@@ -356,6 +371,7 @@ impl_(std::make_unique<VisualSlamImpl>(*this))
   RCLCPP_INFO(get_logger(), "Time taken by cuvslam::WarmUpGPU(): %f", ssw_gpu.Stop());
 }
 
+// 停止并等待受管理的定位线程；按配置尝试保存已初始化地图，最后释放实现对象。
 VisualSlamNode::~VisualSlamNode()
 {
   // Stop any running localization thread
@@ -372,6 +388,7 @@ VisualSlamNode::~VisualSlamNode()
   impl_.reset();
 }
 
+// 重置服务调用实现层 Exit，清除跟踪器及初始化消息；当前响应直接设为成功。
 void VisualSlamNode::CallbackReset(
   const std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::Reset_Request> req,
   std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::Reset_Response> res)
@@ -384,6 +401,7 @@ void VisualSlamNode::CallbackReset(
   res->success = true;
 }
 
+// 读取 SLAM 轨迹并逐个把 cuVSLAM 坐标基转换为 ROS 坐标基，保留 SDK 纳秒时间戳。
 void VisualSlamNode::CallbackGetAllPoses(
   const std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::GetAllPoses_Request> req,
   std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::GetAllPoses_Response> res)
@@ -421,6 +439,7 @@ void VisualSlamNode::CallbackGetAllPoses(
   res->success = (cuvslam_poses.size() != 0);
 }
 
+// 将服务请求中的 ROS 位姿换基为 cuVSLAM 位姿，再设置 SLAM 状态；要求跟踪器已初始化。
 void VisualSlamNode::CallbackSetSlamPose(
   const std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::SetSlamPose_Request> req,
   std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::SetSlamPose_Response> res)
@@ -448,6 +467,7 @@ void VisualSlamNode::CallbackSetSlamPose(
   }
 }
 
+// 在已初始化时调用同步保存包装；注意此回调未使用 SaveMap 的 bool 返回值，响应成功不等同于落盘成功。
 void VisualSlamNode::CallbackSaveMap(
   const std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::FilePath::Request> req,
   std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::FilePath::Response> res)
@@ -467,6 +487,7 @@ void VisualSlamNode::CallbackSaveMap(
   }
 }
 
+// 仅记录后续定位使用的地图目录，不在本回调中读取数据库或立即完成定位。
 void VisualSlamNode::CallbackLoadMap(
   const std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::FilePath::Request> req,
   std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::FilePath::Response> res)
@@ -476,6 +497,7 @@ void VisualSlamNode::CallbackLoadMap(
   res->success = true;
 }
 
+// 创建受管理线程发起异步定位；success=true 表示已发起，完成结果由后续跟踪时检查 future。
 void VisualSlamNode::CallbackLocalizeInMap(
   const std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::LocalizeInMap::Request> req,
   std::shared_ptr<isaac_ros_visual_slam_interfaces::srv::LocalizeInMap::Response> res)
@@ -502,6 +524,7 @@ void VisualSlamNode::CallbackLocalizeInMap(
 
   // Start the localization process in a managed thread
   localization_thread_running_ = true;
+  // 线程只保存定位 future 并发起异步请求，不等待最终定位结果。
   localization_thread_ = std::thread([this, req]() {
         // Store the future in the member variable to prevent it from being destroyed
         {
@@ -523,18 +546,22 @@ void VisualSlamNode::CallbackLocalizeInMap(
   res->success = true;
 }
 
+// 把 IMU 消息交给实现层缓存或按时间排序；VIO 模式才建立此订阅。
 void VisualSlamNode::CallbackImu(const ImuType::ConstSharedPtr & msg) {impl_->CallbackImu(msg);}
 
+// 把索引图像交给实现层同步；图像、掩码、RGBD 深度共用索引空间。
 void VisualSlamNode::CallbackImage(int index, const ImageType & msg)
 {
   impl_->CallbackImage(index, msg);
 }
 
+// 把相机索引和标定交给实现层，供首次构建相机 rig 使用。
 void VisualSlamNode::CallbackCameraInfo(int index, const CameraInfoType::ConstSharedPtr & msg)
 {
   impl_->CallbackCameraInfo(index, msg);
 }
 
+// 使用消息 frame_id 中的位姿提示同步定位；失败时按配置请求新提示或关闭 ROS。
 void VisualSlamNode::CallbackInitialPose(const PoseWithCovarianceStampedType::ConstSharedPtr & msg)
 {
   const rclcpp::Time stamp(msg->header.stamp);

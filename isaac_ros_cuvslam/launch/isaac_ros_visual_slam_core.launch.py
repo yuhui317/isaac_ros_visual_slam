@@ -15,6 +15,7 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# 学习入口：声明图像格式转换与 cuVSLAM 组合节点；本文件只构造 launch 描述，不执行跟踪算法。
 from typing import Any, Dict
 
 from isaac_ros_examples import IsaacROSLaunchFragment
@@ -25,11 +26,14 @@ from launch_ros.actions import ComposableNodeContainer
 from launch_ros.descriptions import ComposableNode
 
 
+# 将相机接口分辨率和 launch 参数整理成可复用组件片段；ROS 包名已是 isaac_ros_cuvslam。
 class IsaacROSCuvslamLaunchFragment(IsaacROSLaunchFragment):
 
+    # 读取延迟求值的 LaunchConfiguration，返回左右图像转换器和 VisualSlamNode 的描述。
     @staticmethod
     def get_composable_nodes(interface_specs: Dict[str, Any]) -> Dict[str, ComposableNode]:
 
+        # 参数在 launch 执行时解析；tracking_mode 的实际取值由 C++ 节点声明为 0/1/2。
         enable_image_denoising = LaunchConfiguration('enable_image_denoising')
         rectified_images = LaunchConfiguration('rectified_images')
         enable_slam_visualization = LaunchConfiguration('enable_slam_visualization')
@@ -48,6 +52,7 @@ class IsaacROSCuvslamLaunchFragment(IsaacROSLaunchFragment):
         image_jitter_threshold_ms = LaunchConfiguration('image_jitter_threshold_ms')
 
         return {
+            # 左右输入各转换为 mono8；width/height 来自 interface_specs，不代表所有传感器的固定分辨率。
             'image_format_converter_node_left': ComposableNode(
                 package='isaac_ros_image_proc',
                 plugin='nvidia::isaac_ros::image_proc::ImageFormatConverterNode',
@@ -74,6 +79,7 @@ class IsaacROSCuvslamLaunchFragment(IsaacROSLaunchFragment):
                     ('image_raw', 'right/image_rect'),
                     ('image', 'right/image_rect_mono'),
                 ]),
+            # 保留原有 C++ 插件命名空间 visual_slam；包名改为 cuvslam 不等于 topic/plugin 全部改名。
             'visual_slam_node': ComposableNode(
                 name='visual_slam_node',
                 package='isaac_ros_cuvslam',
@@ -97,6 +103,7 @@ class IsaacROSCuvslamLaunchFragment(IsaacROSLaunchFragment):
                     'image_jitter_threshold_ms': image_jitter_threshold_ms,
                 }],
                 remappings=[
+                    # 重映射把索引相机图像与各自 CameraInfo 对应；此片段列出四路，实际订阅数量仍由 num_cameras 决定。
                     ('/visual_slam/image_0', 'left/image_rect_mono'),
                     ('/visual_slam/camera_info_0', 'left/camera_info_rect'),
                     ('/visual_slam/image_1', 'right/image_rect_mono'),
@@ -109,6 +116,7 @@ class IsaacROSCuvslamLaunchFragment(IsaacROSLaunchFragment):
             )
         }
 
+    # 提供片段参数的默认声明；调用方需要将这些 launch actions 加入自己的 LaunchDescription。
     @staticmethod
     def get_launch_actions(interface_specs: Dict[str, Any]) -> \
             Dict[str, launch.actions.OpaqueFunction]:
@@ -185,6 +193,7 @@ class IsaacROSCuvslamLaunchFragment(IsaacROSLaunchFragment):
         }
 
 
+# 构造独立容器，使用示例分辨率 1920×1200；当前函数只加入容器，没有加入 get_launch_actions 的默认参数声明。
 def generate_launch_description():
     """Launch file to bring up visual slam node standalone."""
     visual_slam_launch_container = ComposableNodeContainer(

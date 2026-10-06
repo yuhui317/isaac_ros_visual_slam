@@ -15,13 +15,16 @@
 #
 # SPDX-License-Identifier: Apache-2.0
 
+# 学习入口：RealSense 双目红外图像与 IMU 的 VIO 示例；相机驱动和 CUDA/ROS 环境属于外部运行条件。
 import launch
 from launch_ros.actions import ComposableNodeContainer, Node
 from launch_ros.descriptions import ComposableNode
 
 
+# 把相机驱动节点和 VisualSlamNode 容器一起返回；这里只描述连接关系，尚未验证实机运行。
 def generate_launch_description():
     """Launch file which brings up visual slam node configured for RealSense."""
+    # 开启两路红外与 200 Hz IMU，关闭彩色和深度；这些参数是该示例配置，不能套用到任意相机。
     realsense_camera_node = Node(
         name='camera',
         namespace='',
@@ -43,6 +46,7 @@ def generate_launch_description():
         }],
     )
 
+    # tracking_mode=1 明确选择 VIO；base_frame 与两路 optical frame 必须由相机驱动的 TF 标定链连接。
     visual_slam_node = ComposableNode(
         name='visual_slam_node',
         package='isaac_ros_cuvslam',
@@ -67,6 +71,7 @@ def generate_launch_description():
                 'camera_infra2_optical_frame',
             ],
         }],
+        # 每路 image 与 camera_info 配对，同时把 camera/imu 接入 visual_slam/imu。
         remappings=[
             ('visual_slam/image_0', 'camera/infra1/image_rect_raw'),
             ('visual_slam/camera_info_0', 'camera/infra1/camera_info'),
@@ -76,6 +81,7 @@ def generate_launch_description():
         ],
     )
 
+    # 使用 ROS 组合组件容器加载 C++ 插件；GPU 缓冲后端由运行环境提供。
     visual_slam_launch_container = ComposableNodeContainer(
         name='visual_slam_launch_container',
         namespace='',

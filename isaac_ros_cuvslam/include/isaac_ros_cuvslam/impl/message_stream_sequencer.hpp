@@ -25,6 +25,7 @@
 
 #include "isaac_common/messaging/message_buffer.hpp"
 
+// 学习入口：两条时间流的交织模板；同步多相机图像另由 MessageStreamSynchronizer 完成。
 namespace nvidia
 {
 namespace isaac_ros
@@ -36,19 +37,28 @@ namespace visual_slam
 // Streams are named stream1 and stream2 and assumption is stream1 is faster than stream2.
 
 template<class T1, class T2>
+// 合并快流与慢流：一次回调携带一批 T1 和一个 T2；cuVSLAM 调用方把它们用于 IMU 与同步图像组。
 class MessageStreamSequencer
 {
 public:
   using Callback = std::function<void (const std::vector<T1> &, const T2 &)>;
 
+  // 声明两流缓存容量和超时阈值；模板本身只比较传入的整数时间戳与 epsilon，不转换时间单位。
   explicit MessageStreamSequencer(
     uint8_t size_stream1, int64_t eps_stream1, uint8_t size_stream2, int64_t eps_stream2);
+  // 快流入口，把时间戳消息入队并尝试推进慢流批次。
   void CallbackStream1(const int64_t & timestamp, const T1 & msg);
+  // 慢流入口，等待快流赶上或超时后发出批次。
   void CallbackStream2(const int64_t & timestamp, const T2 & msg);
+  // 查询快流下一个缓存时间戳，具体空队列语义由 MessageBuffer 定义。
   int64_t GetNextTimeStampStream1();
+  // 查询慢流下一个缓存时间戳，具体空队列语义由 MessageBuffer 定义。
   int64_t GetNextTimeStampStream2();
+  // 查询快流当前缓存条数。
   size_t GetSizeStream1();
+  // 查询慢流当前缓存条数。
   size_t GetSizeStream2();
+  // 声明输出回调注册接口；注册前默认回调为空操作。
   void RegisterCallback(Callback callback);
 
 private:
@@ -60,6 +70,7 @@ private:
 };
 
 template<class T1, class T2>
+// 按调用方提供的容量与 epsilon 初始化两条 MessageBuffer；不会自动把毫秒变为纳秒。
 MessageStreamSequencer<T1, T2>::MessageStreamSequencer(
   uint8_t size_stream1, int64_t eps_stream1,
   uint8_t size_stream2, int64_t eps_stream2)
@@ -69,6 +80,7 @@ MessageStreamSequencer<T1, T2>::MessageStreamSequencer(
 }
 
 template<class T1, class T2>
+// 快流新消息触发时间比较；过晚消息被丢弃，满足推进或超时条件时按慢流时间弹出快流批次。
 void MessageStreamSequencer<T1, T2>::CallbackStream1(const int64_t & timestamp, const T1 & msg)
 {
   stream1_buff_.Push(timestamp, msg);
@@ -87,6 +99,7 @@ void MessageStreamSequencer<T1, T2>::CallbackStream1(const int64_t & timestamp, 
   }
 
   // Timeouts w.r.t self and other stream
+  // 所有比较都使用传入时间戳与 epsilon 的原数值；核对调用处单位是学习时必须做的接口检查。
   bool self_esp_timeout = std::abs(curr_msg_ts - last_msg_ts) > epsilon_stream1_;
   bool other_esp_timeout = std::abs(curr_msg_ts - stream2_curr_ts) > epsilon_stream2_;
 
@@ -109,6 +122,7 @@ void MessageStreamSequencer<T1, T2>::CallbackStream1(const int64_t & timestamp, 
         next_msg_ts = stream1_buff_.GetNextTimeStamp();
       }
       result.second = stream2_buff_.Pop();
+      // 每个慢流项消费对应快流批次；清空 result.first 后再处理下一个慢流项。
       registered_callback_(result.first, result.second);
       // Clearing stream1 msgs for the subsequent runs
       result.first.clear();
@@ -118,6 +132,7 @@ void MessageStreamSequencer<T1, T2>::CallbackStream1(const int64_t & timestamp, 
 }
 
 template<class T1, class T2>
+// 慢流新消息触发排序；快流尚未赶上且未超时则等待，否则把可用快流消息与慢流消息组合输出。
 void MessageStreamSequencer<T1, T2>::CallbackStream2(const int64_t & timestamp, const T2 & msg)
 {
   stream2_buff_.Push(timestamp, msg);
@@ -155,6 +170,7 @@ void MessageStreamSequencer<T1, T2>::CallbackStream2(const int64_t & timestamp, 
         stream1_next_ts = stream1_buff_.GetNextTimeStamp();
       }
       result.second = stream2_buff_.Pop();
+      // 每个慢流项消费对应快流批次；清空 result.first 后再处理下一个慢流项。
       registered_callback_(result.first, result.second);
       // Clearing stream1 msgs for the subsequent runs
       result.first.clear();
@@ -163,24 +179,29 @@ void MessageStreamSequencer<T1, T2>::CallbackStream2(const int64_t & timestamp, 
 }
 
 template<class T1, class T2>
+// 转发快流缓存的下一个时间戳查询，不修改缓存。
 int64_t MessageStreamSequencer<T1, T2>::GetNextTimeStampStream1()
 {
   return stream1_buff_.GetNextTimeStamp();
 }
 
 template<class T1, class T2>
+// 转发慢流缓存的下一个时间戳查询，不修改缓存。
 int64_t MessageStreamSequencer<T1, T2>::GetNextTimeStampStream2()
 {
   return stream2_buff_.GetNextTimeStamp();
 }
 
 template<class T1, class T2>
+// 转发快流缓存长度查询。
 size_t MessageStreamSequencer<T1, T2>::GetSizeStream1() {return stream1_buff_.Size();}
 
 template<class T1, class T2>
+// 转发慢流缓存长度查询。
 size_t MessageStreamSequencer<T1, T2>::GetSizeStream2() {return stream2_buff_.Size();}
 
 template<class T1, class T2>
+// 保存调用方回调，后续各批次在当前处理路径中直接调用它。
 void MessageStreamSequencer<T1, T2>::RegisterCallback(Callback callback)
 {
   registered_callback_ = callback;

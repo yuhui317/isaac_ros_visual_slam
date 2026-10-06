@@ -23,6 +23,7 @@
 #include "sensor_msgs/distortion_models.hpp"
 #include "rclcpp/logging.hpp"
 
+// 学习入口：标定、位姿、协方差与图像 Buffer 的 ROS↔cuVSLAM 边界；换基和内存视图是不同操作。
 namespace nvidia
 {
 namespace isaac_ros
@@ -44,6 +45,7 @@ constexpr char kPolynomial[] = "polynomial";
 // 2.fisheye4
 // 3.polynomial
 // ROS' PLUMB_BOB = cuVSLAM' brown5k
+// 本地畸变模型枚举用于模板特化，并不是 ROS 消息中的字符串编码。
 enum DistortionModel
 {
   BROWN,
@@ -53,6 +55,7 @@ enum DistortionModel
 };
 
 template<DistortionModel T = DistortionModel::PINHOLE>
+// 默认针孔模型不需要畸变参数；模板特化处理其它模型。
 void FillDistortion(const CameraInfoType::ConstSharedPtr & msg, cuvslam::Camera & camera)
 {
   (void)msg;  // unused
@@ -61,6 +64,7 @@ void FillDistortion(const CameraInfoType::ConstSharedPtr & msg, cuvslam::Camera 
 }
 
 template<>
+// 检查五个参数并重排为 k1/k2/k3/p1/p2；多出的参数不参与转换。
 void FillDistortion<DistortionModel::BROWN>(
   const CameraInfoType::ConstSharedPtr & msg, cuvslam::Camera & camera)
 {
@@ -82,6 +86,7 @@ void FillDistortion<DistortionModel::BROWN>(
 }
 
 template<>
+// 检查四个鱼眼参数并按 SDK 所需顺序写入。
 void FillDistortion<DistortionModel::FISHEYE>(
   const CameraInfoType::ConstSharedPtr & msg, cuvslam::Camera & camera)
 {
@@ -101,6 +106,7 @@ void FillDistortion<DistortionModel::FISHEYE>(
 }
 
 template<>
+// 检查八个有理多项式参数，保留径向与切向系数的 SDK 顺序。
 void FillDistortion<DistortionModel::RATIONAL_POLYNOMIAL>(
   const CameraInfoType::ConstSharedPtr & msg, cuvslam::Camera & camera)
 {
@@ -125,6 +131,7 @@ void FillDistortion<DistortionModel::RATIONAL_POLYNOMIAL>(
   };
 }
 
+// 把 ROS distortion_model 映射到 SDK；空模型或全零系数回退针孔，未知模型抛异常。
 void FillCameraDistortion(const CameraInfoType::ConstSharedPtr & msg, cuvslam::Camera & camera)
 {
   // Fallback to pinhole distortion if no distortion was provided.
@@ -148,6 +155,7 @@ void FillCameraDistortion(const CameraInfoType::ConstSharedPtr & msg, cuvslam::C
   throw std::runtime_error("Unsupported distortion model.");
 }
 
+// 从 K 的 fx/fy/cx/cy 和消息宽高创建相机内参，然后填充畸变模型。
 void FillIntrinsics(const CameraInfoType::ConstSharedPtr & msg, cuvslam::Camera & camera)
 {
   camera.size = {static_cast<int32_t>(msg->width), static_cast<int32_t>(msg->height)};
@@ -156,6 +164,7 @@ void FillIntrinsics(const CameraInfoType::ConstSharedPtr & msg, cuvslam::Camera 
   FillCameraDistortion(msg, camera);
 }
 
+// 把 ROS 基座坐标基下的 optical 相机外参转成 cuVSLAM rig_from_camera。
 void FillExtrinsics(
   const tf2::Transform & base_canonical_pose_camera_optical,
   cuvslam::Camera & camera)
@@ -170,6 +179,7 @@ void FillExtrinsics(
 }
 
 // Helper function that converts transform into cuvslam::Pose
+// 序列化 tf2 位姿：四元数按 x/y/z/w，平移按 x/y/z；此函数本身不换坐标基。
 cuvslam::Pose TocuVSLAMPose(const tf2::Transform & tf_mat)
 {
   cuvslam::Pose cuvslamPose;
@@ -186,6 +196,7 @@ cuvslam::Pose TocuVSLAMPose(const tf2::Transform & tf_mat)
 }
 
 // Helper function to convert cuvslam pose estimate to tf2::Transform
+// 把 SDK 四元数 x/y/z/w 与三维平移恢复为 tf2 位姿；此函数本身不换坐标基。
 tf2::Transform FromcuVSLAMPose(
   const cuvslam::Pose & cuvslam_pose)
 {
@@ -202,6 +213,7 @@ tf2::Transform FromcuVSLAMPose(
 // and source.
 // source_pose_source = Transformation(Rotation and translation) inside source frame.
 // It is any arbritary transformation in source frame.
+// 对同一刚体变换做换基 T_new=R*T_old*R^-1；不能把它误用为单边相机外参组合。
 tf2::Transform ChangeBasis(
   const tf2::Transform & target_pose_source, const tf2::Transform & source_pose_source)
 {
@@ -209,6 +221,7 @@ tf2::Transform ChangeBasis(
 }
 
 // Helper function to create cuvslam::ImageEncoding from string using sensor_msgs image encoding.
+// 仅接受 mono8/rgb8 跟踪图像；其它编码抛 invalid_argument。
 cuvslam::Image::Encoding TocuVSLAMImageEncoding(const std::string & image_encoding)
 {
   if (image_encoding == sensor_msgs::image_encodings::MONO8) {
@@ -224,6 +237,7 @@ cuvslam::Image::Encoding TocuVSLAMImageEncoding(const std::string & image_encodi
 // The caller must keep the supplied ReadHandle alive until cuvslam has finished
 // using the returned cuvslam::Image so that the GPU memory and CUDA-event
 // synchronization remain valid.
+// 包装 CUDA 读句柄为 SDK 图像视图；width/height/pitch 来自消息，pixels 不在此处复制。
 cuvslam::Image TocuVSLAMImage(
   int32_t camera_index,
   const sensor_msgs::msg::Image & image,
@@ -232,6 +246,7 @@ cuvslam::Image TocuVSLAMImage(
 {
   cuvslam::Image cuvslam_image;
   cuvslam_image.timestamp_ns = acqtime_ns;
+  // ReadHandle 必须覆盖 Track 的使用期；这里保留 GPU 指针而不是创建独立像素所有权。
   cuvslam_image.pixels = read_handle.get_ptr();
   cuvslam_image.width = image.width;
   cuvslam_image.height = image.height;
@@ -246,6 +261,7 @@ cuvslam::Image TocuVSLAMImage(
 // Helper function to create cuvslam::Image depth image from a rosidl::Buffer-backed image.
 // The caller must keep the supplied ReadHandle alive until cuvslam has finished
 // using the returned cuvslam::Image.
+// 包装 RGBD 深度视图，16UC1/mono16 为 UINT16，32FC1 为 FLOAT32；深度缩放另在配置中。
 cuvslam::Image TocuVSLAMDepthImage(
   int32_t camera_index,
   const sensor_msgs::msg::Image & image,
@@ -279,6 +295,7 @@ cuvslam::Image TocuVSLAMDepthImage(
 }
 
 // Helper function to pass IMU data to cuVSLAM
+// 换基线加速度与角速度三维向量并保留纳秒时间戳；输入遵循 ROS IMU 消息单位。
 cuvslam::ImuMeasurement TocuVSLAMImuMeasurement(
   const ImuType::ConstSharedPtr & msg_imu, const int64_t & acqtime_ns)
 {
@@ -291,6 +308,7 @@ cuvslam::ImuMeasurement TocuVSLAMImuMeasurement(
   const tf2::Vector3 ros_ang_vel(in_ang_vel.x, in_ang_vel.y, in_ang_vel.z);
 
   // convert from ros frame to cuvslam
+  // 仅旋转向量坐标基，不改变线加速度 m/s² 与角速度 rad/s 的数值单位。
   const tf2::Vector3 cuvslam_lin_acc = cuvslam_pose_canonical * ros_lin_acc;
   const tf2::Vector3 cuvslam_ang_vel = cuvslam_pose_canonical * ros_ang_vel;
 
@@ -308,6 +326,7 @@ cuvslam::ImuMeasurement TocuVSLAMImuMeasurement(
   return measurement;
 }
 
+// 将 6×6 协方差从旋转在前重排为 ROS 平移在前，再分别旋转平移/旋转块的坐标基。
 Eigen::Matrix<float, 6, 6> FromcuVSLAMCovariance(const cuvslam::PoseCovariance & covariance)
 {
   tf2::Quaternion quat = canonical_pose_cuvslam.getRotation();

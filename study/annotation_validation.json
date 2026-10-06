@@ -1,0 +1,433 @@
+{
+  "baseline": "e4dc8f59816dfca387bcb92364ecaf9207216475",
+  "branch": "codex/study/isaac-ros-code-analysis",
+  "original_files": 77,
+  "verified_files": 77,
+  "gitlink_references": [
+    {
+      "path": "cuvslam",
+      "commit": "33da60662b27c0c5b63e0597bd778066af2731ed",
+      "reference": "equal",
+      "source_files_checked": false
+    }
+  ],
+  "annotated_files": 8,
+  "modified_original_files": 9,
+  "annotated_python_definitions": 5,
+  "runtime_or_gpu_executed": false,
+  "cpp_compilation_executed": false,
+  "new_study_tools": [
+    {
+      "path": "study/generate_study_index.py",
+      "syntax": "passed",
+      "definitions": 8
+    },
+    {
+      "path": "study/verify_annotations.py",
+      "syntax": "passed",
+      "definitions": 9
+    }
+  ],
+  "limitations": "C++ lexical/static check only, not preprocessing or compilation; pinned submodule contents are not checked",
+  "passed": true,
+  "failures": [],
+  "files": [
+    {
+      "path": ".gitattributes",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": ".gitignore",
+      "changed": false,
+      "added_lines": 0
+    },
+    {
+      "path": ".gitmodules",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "CONTRIBUTING.md",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "LICENSE",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "README.md",
+      "changed": true,
+      "added_lines": 9
+    },
+    {
+      "path": "SECURITY.md",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/CMakeLists.txt",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/config/foxglove_bridge_launch.xml",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/config/multi_realsense.yaml",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/config/zed.yaml",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/foxglove_layouts/foxglove_layout_multi_realsense.json",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/foxglove_layouts/foxglove_layout_realsense_mask.json",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/cuvslam_ros_conversion.hpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/has_subscribers.hpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/landmarks_vis_helper.hpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/limited_vector.hpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/localizer_vis_helper.hpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/message_stream_sequencer.hpp",
+      "changed": true,
+      "added_lines": 21,
+      "cpp_noncomment_tokens": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/pose_cache.hpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/posegraph_vis_helper.hpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/stopwatch.hpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/types.hpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/visual_slam_impl.hpp",
+      "changed": true,
+      "added_lines": 27,
+      "cpp_noncomment_tokens": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/viz_helper.hpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/include/isaac_ros_cuvslam/visual_slam_node.hpp",
+      "changed": true,
+      "added_lines": 22,
+      "cpp_noncomment_tokens": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/launch/isaac_ros_visual_slam.launch.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_core.launch.py",
+      "changed": true,
+      "added_lines": 9,
+      "python_ast": "equal",
+      "python_executable_tokens": "equal",
+      "definitions": 4
+    },
+    {
+      "path": "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_isaac_sim.launch.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_multi_realsense.launch.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_realsense.launch.py",
+      "changed": true,
+      "added_lines": 6,
+      "python_ast": "equal",
+      "python_executable_tokens": "equal",
+      "definitions": 1
+    },
+    {
+      "path": "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_realsense_mask.launch.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_realsense_rgbd.launch.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/package.xml",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/rviz/default.cfg.rviz",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/rviz/isaac_sim.cfg.rviz",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/rviz/multi_realsense.cfg.rviz",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/rviz/realsense.cfg.rviz",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/rviz/realsense_rgbd.cfg.rviz",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/rviz/vslam_keepall.cfg.rviz",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/rviz/vslam_segformer.rviz",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/rviz/zed.cfg.rviz",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/src/impl/cuvslam_ros_conversion.cpp",
+      "changed": true,
+      "added_lines": 19,
+      "cpp_noncomment_tokens": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/src/impl/landmarks_vis_helper.cpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/src/impl/localizer_vis_helper.cpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/src/impl/pose_cache.cpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/src/impl/posegraph_vis_helper.cpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/src/impl/visual_slam_impl.cpp",
+      "changed": true,
+      "added_lines": 47,
+      "cpp_noncomment_tokens": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/src/impl/viz_helper.cpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/src/visual_slam_main.cpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/src/visual_slam_node.cpp",
+      "changed": true,
+      "added_lines": 27,
+      "cpp_noncomment_tokens": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/__init__.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/helpers.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/isaac_ros_visual_slam_pol_multi_cam_imu.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/isaac_ros_visual_slam_pol_rgbd_cam.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/isaac_ros_visual_slam_pol_single_cam_imu.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/isaac_ros_visual_slam_srv_get_all_poses.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/isaac_ros_visual_slam_srv_load_map.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/isaac_ros_visual_slam_srv_localize_in_map.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/isaac_ros_visual_slam_srv_reset.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/isaac_ros_visual_slam_srv_save_map.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/isaac_ros_visual_slam_srv_set_slam_pose.py",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/test_cases/rosbags/r2b_galileo/cuvslam_map/data.mdb",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/test_cases/rosbags/r2b_galileo/metadata.yaml",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/test_cases/rosbags/r2b_galileo/nova/calibration/isaac_calibration.urdf",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/test_cases/rosbags/r2b_galileo/r2b_galileo_0.mcap",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/test_cases/rosbags/rgbd_static/metadata.yaml",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/test_cases/rosbags/rgbd_static/rosbag2_rs455_rgbd.mcap",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_cuvslam/test/test_message_stream_sequencer.cpp",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_visual_slam_interfaces/CMakeLists.txt",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_visual_slam_interfaces/msg/VisualSlamStatus.msg",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_visual_slam_interfaces/package.xml",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_visual_slam_interfaces/srv/FilePath.srv",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_visual_slam_interfaces/srv/GetAllPoses.srv",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_visual_slam_interfaces/srv/LocalizeInMap.srv",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_visual_slam_interfaces/srv/Reset.srv",
+      "changed": false,
+      "protected_bytes": "equal"
+    },
+    {
+      "path": "isaac_ros_visual_slam_interfaces/srv/SetSlamPose.srv",
+      "changed": false,
+      "protected_bytes": "equal"
+    }
+  ]
+}

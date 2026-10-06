@@ -1,0 +1,19 @@
+{
+  "name": "isaac_ros_visual_slam",
+  "upstream": "NVIDIA-ISAAC-ROS/isaac_ros_visual_slam",
+  "fork": "yuhui317/isaac_ros_visual_slam",
+  "local_path": "projects/isaac_ros_ws/src/isaac_ros_visual_slam",
+  "source_branch": "release-5.0",
+  "study_branch": "codex/study/isaac-ros-code-analysis",
+  "baseline": "e4dc8f59816dfca387bcb92364ecaf9207216475",
+  "checkout_date": "2026-10-06",
+  "annotated_files": 8,
+  "read_files": 13,
+  "original_files": 77,
+  "gitlinks": [
+    {
+      "path": "cuvslam",
+      "commit": "33da60662b27c0c5b63e0597bd778066af2731ed"
+    }
+  ]
+}

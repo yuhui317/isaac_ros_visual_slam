@@ -53,6 +53,7 @@
 #include "tf2_ros/transform_broadcaster.hpp"
 #include "tf2_ros/transform_listener.hpp"
 
+// 学习入口：VisualSlamNode 私有实现的状态与方法；图像同步、IMU 交织、SDK 所有权及定位 future 在此聚合。
 namespace nvidia
 {
 namespace isaac_ros
@@ -62,9 +63,11 @@ namespace visual_slam
 
 constexpr int32_t kMaxNumCameraParameters = 12;
 
+// 实现对象持有跟踪资源；接口层节点引用与 CUDA 流的生命周期必须长于当前处理。
 struct VisualSlamNode::VisualSlamImpl
 {
   // Asynchronous response for CUVSLAM_LocalizeInExistDb()
+  // promise 把 SDK 定位回调的位姿/错误转换为 Boost future。
   struct LocalizeInExistDbContext
   {
     using Response = boost::outcome_v2::result<cuvslam::Pose, std::string>;
@@ -72,79 +75,101 @@ struct VisualSlamNode::VisualSlamImpl
   };
 
 
+  // 声明实现构造：配置多相机同步、IMU 交织、TF 和 CUDA 同步流。
   explicit VisualSlamImpl(VisualSlamNode & vslam_node);
 
+  // 声明清理跟踪/可视化对象并销毁 CUDA 流的析构路径。
   ~VisualSlamImpl();
 
   // Helpers to initialize the cuvslam tracker.
+  // 用首次 CameraInfo、所需 IMU 和 TF 外参建立 SDK 相机 rig 与跟踪器。
   void Initialize();
 
+  // 检查标定消息路数；VIO 还需要首次 IMU 消息。
   bool IsReadyForInitialization() const;
 
+  // 用 cuvslam_odometry 是否存在表示跟踪器初始化状态。
   bool IsInitialized() const;
 
+  // 释放 SDK 对象、清空位姿缓存和初始化消息，并尝试结束未完成的定位 promise。
   void Exit();
 
   // Create the configuration for the cuvslam tracker.
+  // 将 ROS 跟踪模式/图像预处理/RGBD 参数转换成 SDK odometry 配置。
   cuvslam::Odometry::Config CreateOdometryConfiguration();
 
   // Create the configuration for the cuvslam slam.
+  // 将地图大小、回环间隔、平面约束及可视化配置写入 SDK SLAM 配置。
   cuvslam::Slam::Config CreateSlamConfiguration();
 
   // Helper function to publish a transform to the tf tree.
+  // 以 target 为父坐标系、source 为子坐标系发布给定 pose。
   void PublishFrameTransform(
     rclcpp::Time stamp, const tf2::Transform & pose, const std::string & target,
     const std::string & source);
 
   // Helper to get latest transform from the tf tree.
+  // 查询 TF 最新可用变换；初始化外参在此路径使用最新值而非传入传感器采集时刻。
   tf2::Transform GetLatestTransform(
     const std::string & target, const std::string & source);
 
   // Helper to publish the estimated velocity from odometry.
+  // 把位姿缓存估计的线/角速度可视化为两个箭头。
   void PublishOdometryVelocity(
     rclcpp::Time stamp, const std::string & frame_id,
     const rclcpp::Publisher<MarkerArrayType>::SharedPtr publisher);
 
   // Helper to publish the estimated gravity vector.
+  // 仅 VIO 且 SDK 已有重力估计时换基并发布可视化箭头。
   void PublishGravity(
     rclcpp::Time stamp, const std::string & frame_id,
     const rclcpp::Publisher<MarkerType>::SharedPtr publisher);
 
   // Callbacks for subscribers.
+  // 初始化前缓存首个 IMU，初始化后进入快流排序器。
   void CallbackImu(const ImuType::ConstSharedPtr & msg);
+  // 初始化后按相机/掩码/深度索引和采集时间进入图像同步器。
   void CallbackImage(int index, const ImageType & image_view);
+  // 初始化前缓存各路标定，达到条件时发起初始化。
   void CallbackCameraInfo(int index, const CameraInfoType::ConstSharedPtr & msg);
 
   // Callback for synchronizer.
+  // 将多相机同步组作为慢流交给 IMU/图像交织器。
   void CallbackSynchronizedImages(
     int64_t current_ts, const std::vector<std::pair<int, ImageType>> & idx_and_image_msgs);
 
   // Callback for sequencer
+  // 跟踪核心：登记 IMU→取得 Buffer 句柄→Track→换基→TF/位姿/里程计/状态。
   void UpdatePose(
     const std::vector<ImuType::ConstSharedPtr> & imu_msgs,
     const std::vector<std::pair<int, ImageType>> & idx_and_image_msgs);
 
   // Save the current map to disk.
+  // 同步等待异步 SDK 保存回调，返回实际保存结果。
   bool SaveMap(const std::string & map_folder_path);
 
   // Core functionality to localize in a map. Expects and returns the pose in cuvslam conventions.
+  // 验证地图目录与 .mdb 文件后用 cuVSLAM 坐标的提示发起异步定位。
   boost::future<LocalizeInExistDbContext::Response> CuvslamInternalLocalizeInMapAsync(
     const std::string & map_folder_path,
     const cuvslam::Pose & pose_hint);
 
   // Localize in an existing map asynchronously. Expects and returns the pose in ROS conventions.
+  // 将 ROS 提示换到 map/cuVSLAM 坐标，返回会转回 ROS map 位姿的 future。
   boost::future<std::optional<PoseType>> LocalizeInMapAsync(
     const std::string & map_folder_path,
     const PoseType & pose_hint,
     const std::string & frame_id);
 
   // Synchonous wrapper for LocalizeInMapAsync.
+  // 同步包装定位 future，调用路径会等待结果。
   std::optional<PoseType> LocalizeInMap(
     const std::string & map_folder_path,
     const PoseType & pose_hint,
     const std::string & frame_id);
 
   // Check and handle the localization future status
+  // 非阻塞检查受管理的定位 future，记录结果后清空它。
   void CheckLocalizationStatus();
 
   // Reference to the ros node.
@@ -152,6 +177,7 @@ struct VisualSlamNode::VisualSlamImpl
 
   // Synchronizer used to sync all image messages.
   using Synchronizer = isaac_common::messaging::MessageStreamSynchronizer<ImageType>;
+  // 先同步图像索引组，再把整组交给 sequencer；CameraInfo 属于初始化标定而非每帧同步成员。
   Synchronizer sync;
 
   // Sequencer used to sequence imu and image messages.
@@ -219,6 +245,7 @@ struct VisualSlamNode::VisualSlamImpl
 
   // CUDA stream used for rosidl::Buffer ReadHandle synchronization between the producer
   // (upstream node) and cuVSLAM. Created in the constructor and destroyed in the destructor.
+  // 此流用于 Buffer 生产者/消费者同步，SDK Track 还可能使用自己的内部 CUDA 流。
   cudaStream_t cuda_stream_{};
 };
 

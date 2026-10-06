@@ -1,0 +1,46 @@
+{
+  "baseline": "e4dc8f59816dfca387bcb92364ecaf9207216475",
+  "phase": "initial_static_analysis",
+  "annotated_files": [
+    "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_core.launch.py",
+    "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_realsense.launch.py",
+    "isaac_ros_cuvslam/src/visual_slam_node.cpp",
+    "isaac_ros_cuvslam/include/isaac_ros_cuvslam/visual_slam_node.hpp",
+    "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/message_stream_sequencer.hpp",
+    "isaac_ros_cuvslam/src/impl/cuvslam_ros_conversion.cpp",
+    "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/visual_slam_impl.hpp",
+    "isaac_ros_cuvslam/src/impl/visual_slam_impl.cpp"
+  ],
+  "read_files": [
+    "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_core.launch.py",
+    "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_realsense.launch.py",
+    "isaac_ros_cuvslam/src/visual_slam_node.cpp",
+    "isaac_ros_cuvslam/include/isaac_ros_cuvslam/visual_slam_node.hpp",
+    "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/message_stream_sequencer.hpp",
+    "isaac_ros_cuvslam/src/impl/cuvslam_ros_conversion.cpp",
+    "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/visual_slam_impl.hpp",
+    "isaac_ros_cuvslam/src/impl/visual_slam_impl.cpp",
+    ".gitmodules",
+    "README.md",
+    "isaac_ros_cuvslam/CMakeLists.txt",
+    "isaac_ros_cuvslam/package.xml",
+    "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/types.hpp"
+  ],
+  "submodules_initialized": false,
+  "runtime_verified": false,
+  "read_depth": {
+    "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_core.launch.py": "full",
+    "isaac_ros_cuvslam/launch/isaac_ros_visual_slam_realsense.launch.py": "full",
+    "isaac_ros_cuvslam/src/visual_slam_node.cpp": "full",
+    "isaac_ros_cuvslam/include/isaac_ros_cuvslam/visual_slam_node.hpp": "full",
+    "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/message_stream_sequencer.hpp": "full",
+    "isaac_ros_cuvslam/src/impl/cuvslam_ros_conversion.cpp": "full",
+    "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/visual_slam_impl.hpp": "full",
+    "isaac_ros_cuvslam/src/impl/visual_slam_impl.cpp": "full",
+    ".gitmodules": "reference: 版本/依赖/类型核对；未登记全文阅读深度",
+    "README.md": "reference: 版本/依赖/类型核对；未登记全文阅读深度",
+    "isaac_ros_cuvslam/CMakeLists.txt": "reference: 版本/依赖/类型核对；未登记全文阅读深度",
+    "isaac_ros_cuvslam/package.xml": "reference: 版本/依赖/类型核对；未登记全文阅读深度",
+    "isaac_ros_cuvslam/include/isaac_ros_cuvslam/impl/types.hpp": "reference: 版本/依赖/类型核对；未登记全文阅读深度"
+  }
+}

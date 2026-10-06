@@ -119,3 +119,12 @@ this repository.
 ## Latest
 
 Update 2026-09-21: Renamed the isaac_ros_visual_slam package to isaac_ros_cuvslam, and fixed the RealSense segmentation mask workflow; isaac_ros_visual_slam_interfaces is unchanged
+
+
+## 本地学习入口
+
+本轮初步静态分析与中文注释范围见 [study/analysis.md](study/analysis.md) 和 [study/annotation_scope.json](study/annotation_scope.json)。原运行环境与源码均未在本轮构建或执行；注释修改待人工审阅后再提交。
+
+### 学习材料更新与审查
+
+[代码树](study/code_tree.md) · [源码定位](study/code_symbols.md) · [正式验证报告](study/annotation_validation.json)。在本仓目录执行 `python study/generate_study_index.py` 更新树和行号，再执行 `python study/verify_annotations.py --report study/annotation_validation.json` 检查原代码保留情况。工具使用固定基线，不启动上游项目；阅读深度见范围表。
